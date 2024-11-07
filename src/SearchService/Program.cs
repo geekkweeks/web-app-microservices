@@ -1,13 +1,17 @@
-using MongoDB.Driver;
-using MongoDB.Entities;
+using System.Net;
+using Polly;
+using Polly.Extensions.Http;
 using SearchService.Data;
-using SearchService.Models;
+using SearchService.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddControllers();
+
+// Apply policy for retrieving auction data from Auction service in service below
+builder.Services.AddHttpClient<AuctionSvcHttpClient>().AddPolicyHandler(GetPolicy());
 
 var app = builder.Build();
 
@@ -16,14 +20,27 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-try
+app.Lifetime.ApplicationStarted.Register(async () =>
 {
-    await DbInitializer.InitDb(app);
+    try
+    {
+        await DbInitializer.InitDb(app);
 
-}
-catch (Exception ex)
-{
-    Console.WriteLine(ex);
-}
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine(ex);
+    }
+
+});
 
 app.Run();
+
+
+// Policy for retrieving auction data from Auction service until successful
+// Every 3 seconds the function will keep retrying until it gets successful
+static IAsyncPolicy<HttpResponseMessage> GetPolicy()
+    => HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(msg => msg.StatusCode == HttpStatusCode.NotFound)
+        .WaitAndRetryForeverAsync(_ => TimeSpan.FromSeconds(3));
