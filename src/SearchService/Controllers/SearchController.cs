@@ -10,25 +10,24 @@ namespace SearchService.Controllers
     public class SearchController : ControllerBase
     {
         [HttpGet]
-        public async Task<ActionResult<List<Item>>> SearchItems([FromQuery]SearchParams request)
+        public async Task<ActionResult<List<Item>>> SearchItems([FromQuery] SearchParams searchParams)
         {
             var query = DB.PagedSearch<Item, Item>();
 
-            query.Sort(x => x.Ascending(a => a.Make));
-
-            if (!string.IsNullOrEmpty(request.SearchTerm))
+            if (!string.IsNullOrEmpty(searchParams.SearchTerm))
             {
-                query.Match(Search.Full, request.SearchTerm).SortByTextScore();
+                query.Match(Search.Full, searchParams.SearchTerm).SortByTextScore();
             }
 
-            query = request.OrderBy switch
+            query = searchParams.OrderBy switch
             {
-                "make" => query.Sort(x => x.Ascending(a => a.Make)),
+                "make" => query.Sort(x => x.Ascending(a => a.Make))
+                    .Sort(x => x.Ascending(a => a.Model)),
                 "new" => query.Sort(x => x.Descending(a => a.CreatedAt)),
                 _ => query.Sort(x => x.Ascending(a => a.AuctionEnd))
             };
 
-            query = request.FilterBy switch
+            query = searchParams.FilterBy switch
             {
                 "finished" => query.Match(x => x.AuctionEnd < DateTime.UtcNow),
                 "endingSoon" => query.Match(x => x.AuctionEnd < DateTime.UtcNow.AddHours(6)
@@ -36,28 +35,28 @@ namespace SearchService.Controllers
                 _ => query.Match(x => x.AuctionEnd > DateTime.UtcNow)
             };
 
-            if (!string.IsNullOrEmpty(request.Seller))
+            if (!string.IsNullOrEmpty(searchParams.Seller))
             {
-                query.Match(x => x.Seller == request.Seller);
+                query.Match(x => x.Seller == searchParams.Seller);
             }
 
-            if (!string.IsNullOrEmpty(request.Winner))
+            if (!string.IsNullOrEmpty(searchParams.Winner))
             {
-                query.Match(x => x.Winner == request.Winner);
+                query.Match(x => x.Winner == searchParams.Winner);
             }
 
-            query.PageNumber(request.PageNumber);
-            query.PageSize(request.PageSize);
+            query.PageNumber(searchParams.PageNumber);
+            query.PageSize(searchParams.PageSize);
 
             var result = await query.ExecuteAsync();
 
             return Ok(new
             {
-                data = result.Results,
+                results = result.Results,
                 pageCount = result.PageCount,
                 totalCount = result.TotalCount
             });
         }
     }
-        
+
 }
